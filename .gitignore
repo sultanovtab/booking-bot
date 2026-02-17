@@ -1,0 +1,38 @@
+# --- secrets ---
+.env
+*.env
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+
+# --- venv ---
+.venv/
+venv/
+ENV/
+env/
+
+# --- sqlite / local data ---
+*.sqlite3
+*.db
+
+run.ps1
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- logs ---
+*.log
+
+# IDE
+.vscode/
+/idea/
