@@ -4,6 +4,7 @@ from datetime import datetime
 
 DB_PATH = "bookings.sqlite3"
 
+
 def init_db():
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
@@ -20,7 +21,6 @@ def init_db():
         team_size INTEGER NOT NULL,
         slot_iso TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'pending',
-
         confirmed_by_id INTEGER,
         confirmed_by_name TEXT,
         confirmed_at TEXT
@@ -29,26 +29,26 @@ def init_db():
     con.commit()
     con.close()
 
-def is_slot_taken(slot_iso: str) -> bool:
+
+def list_slot_services(slot_iso: str) -> set[str]:
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
-    cur.execute(
-        "SELECT 1 FROM bookings WHERE slot_iso=? AND status IN ('pending','confirmed') LIMIT 1",
-        (slot_iso,)
-    )
-    row = cur.fetchone()
+    cur.execute("""
+        SELECT service_key
+        FROM bookings
+        WHERE slot_iso=? AND status IN ('pending','confirmed')
+    """, (slot_iso,))
+    rows = cur.fetchall()
     con.close()
-    return row is not None
+    return {r[0] for r in rows}
+
 
 def create_booking(*, tg_user_id: int, tg_username: str | None, name: str, phone: str,
                    service_key: str, service_title: str, team_size: int, slot_iso: str) -> int:
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
     cur.execute("""
-        INSERT INTO bookings (
-            created_at, tg_user_id, tg_username, name, phone,
-            service_key, service_title, team_size, slot_iso, status
-        )
+        INSERT INTO bookings (created_at, tg_user_id, tg_username, name, phone, service_key, service_title, team_size, slot_iso, status)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
     """, (
         datetime.utcnow().isoformat(timespec="seconds"),
@@ -60,31 +60,34 @@ def create_booking(*, tg_user_id: int, tg_username: str | None, name: str, phone
     con.close()
     return booking_id
 
+
+def get_booking(booking_id: int):
+    con = sqlite3.connect(DB_PATH)
+    cur = con.cursor()
+    cur.execute("""
+      SELECT id, tg_user_id, tg_username, name, phone,
+             service_key, service_title, team_size, slot_iso,
+             status, confirmed_by_id, confirmed_by_name, confirmed_at
+      FROM bookings WHERE id=?
+    """, (booking_id,))
+    row = cur.fetchone()
+    con.close()
+    return row
+
+
 def confirm_booking(booking_id: int, admin_id: int, admin_name: str) -> int:
-    """
-    Возвращает количество изменённых строк:
-    1 = подтвердили успешно
-    0 = бронь уже подтверждена/отклонена кем-то другим
-    """
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
     cur.execute("""
         UPDATE bookings
-        SET status='confirmed',
-            confirmed_by_id=?,
-            confirmed_by_name=?,
-            confirmed_at=?
+        SET status='confirmed', confirmed_by_id=?, confirmed_by_name=?, confirmed_at=?
         WHERE id=? AND status='pending'
-    """, (
-        admin_id,
-        admin_name,
-        datetime.utcnow().isoformat(timespec="seconds"),
-        booking_id
-    ))
+    """, (admin_id, admin_name, datetime.utcnow().isoformat(timespec="seconds"), booking_id))
     con.commit()
     changed = cur.rowcount
     con.close()
     return changed
+
 
 def reject_booking(booking_id: int) -> int:
     con = sqlite3.connect(DB_PATH)
@@ -99,32 +102,6 @@ def reject_booking(booking_id: int) -> int:
     con.close()
     return changed
 
-def get_booking(booking_id: int):
-    con = sqlite3.connect(DB_PATH)
-    cur = con.cursor()
-    cur.execute("""
-      SELECT
-        id, tg_user_id, tg_username, name, phone,
-        service_key, service_title, team_size, slot_iso, status,
-        confirmed_by_id, confirmed_by_name, confirmed_at
-      FROM bookings
-      WHERE id=?
-    """, (booking_id,))
-    row = cur.fetchone()
-    con.close()
-    return row
-    
-def list_slot_services(slot_iso: str):
-    con = sqlite3.connect(DB_PATH)
-    cur = con.cursor()
-    cur.execute("""
-        SELECT service_key
-        FROM bookings
-        WHERE slot_iso=? AND status IN ('pending','confirmed')
-    """, (slot_iso,))
-    rows = cur.fetchall()
-    con.close()
-    return {r[0] for r in rows}
 
 def list_bookings_for_date(date_iso: str):
     con = sqlite3.connect(DB_PATH)
