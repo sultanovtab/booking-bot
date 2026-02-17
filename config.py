@@ -35,7 +35,7 @@ SETTINGS = Settings()
 def get_admin_ids() -> list[int]:
     """
     Можно управлять админами без кода через ENV:
-    ADMIN_CHAT_IDS="262051696,817280523"
+    ADMIN_CHAT_IDS="262051696,8175791933"
     Если env нет — берём DEFAULT_ADMINS
     """
     raw = os.getenv("ADMIN_CHAT_IDS", "").strip()
