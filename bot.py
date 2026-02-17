@@ -28,19 +28,22 @@ import admin as admin_mod
 
 # ---------- env ----------
 load_dotenv()
+MODE = os.getenv("MODE", "prod").strip().lower()  # prod | local
+
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 if not BOT_TOKEN:
-    raise RuntimeError("Не найден BOT_TOKEN в Render Environment.")
+    raise RuntimeError("Не найден BOT_TOKEN в окружении (Environment/.env).")
 
-WEBHOOK_BASE = os.getenv("WEBHOOK_BASE", "").strip()   # https://...onrender.com
-WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "").strip()   # /tg/webhook_secret
+WEBHOOK_BASE = os.getenv("WEBHOOK_BASE", "").strip()   # https://...onrender.com (только для prod)
+WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "").strip()   # /tg/webhook_secret (только для prod)
 
-if not WEBHOOK_BASE:
-    raise RuntimeError("Не найден WEBHOOK_BASE в Render Environment (например https://booking-bot-11fl.onrender.com)")
-if not WEBHOOK_PATH or not WEBHOOK_PATH.startswith("/"):
-    raise RuntimeError("WEBHOOK_PATH должен начинаться с '/', например /tg/webhook_kletka_2026")
-
-WEBHOOK_URL = WEBHOOK_BASE.rstrip("/") + WEBHOOK_PATH
+WEBHOOK_URL = ""
+if MODE != "local":
+    if not WEBHOOK_BASE:
+        raise RuntimeError("Не найден WEBHOOK_BASE (например https://booking-bot-11fl.onrender.com)")
+    if (not WEBHOOK_PATH) or (not WEBHOOK_PATH.startswith("/")):
+        raise RuntimeError("WEBHOOK_PATH должен начинаться с '/', например /tg/webhook_kletka_2026")
+    WEBHOOK_URL = WEBHOOK_BASE.rstrip("/") + WEBHOOK_PATH
 
 TZ = ZoneInfo(SETTINGS.TZ)
 ADMIN_IDS = set(get_admin_ids())
@@ -169,10 +172,14 @@ async def cancel(message: Message, state: FSMContext):
 
 async def cmd_help(message: Message):
     await message.answer(
-        "• /start — меню\n• /book — бронь\n• /cancel — отмена\n• /admin\n\n"
-        "Квесты доступны: 10:00–20:30, Каннибал до 23:30.\n"
+        "• /start — меню\n"
+        "• /book — бронь\n"
+        "• /cancel — отмена\n"
+        "• /admin\n\n"
+        "Квесты доступны: 10:00–20:30, Каннибал до 23:30.\n",
         reply_markup=main_menu_kb(),
     )
+
 
 
 async def got_name(message: Message, state: FSMContext):
@@ -419,16 +426,37 @@ async def telegram_webhook(request: Request):
 @app.on_event("startup")
 async def on_startup():
     booking_db.init_db()
-    await bot.delete_webhook(drop_pending_updates=True)
-    await bot.set_webhook(WEBHOOK_URL)
-
+    # В prod работаем через webhook (Render). В local webhook не нужен.
+    if MODE != "local":
+        # На всякий случай очищаем висящий webhook и ставим новый
+        await bot.delete_webhook(drop_pending_updates=True)
+        if not WEBHOOK_URL.startswith("https://"):
+            raise RuntimeError("WEBHOOK_URL должен начинаться с https://")
+        await bot.set_webhook(WEBHOOK_URL)
 
 @app.on_event("shutdown")
 async def on_shutdown():
-    await bot.delete_webhook()
-
+    if MODE != "local":
+        await bot.delete_webhook()
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", "10000"))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # local: удобный тестовый режим (polling) — запускай с MODE=local и DEV токеном
+    # prod: webhook + FastAPI (Render) — запускай с MODE=prod и PROD токеном
+    if MODE == "local":
+        import asyncio
 
+        async def _run_local():
+            booking_db.init_db()
+            _bot = Bot(token=BOT_TOKEN)
+            _dp = build_dispatcher()
+            # У DEV-бота вебхук не нужен
+            try:
+                await _bot.delete_webhook(drop_pending_updates=True)
+            except Exception:
+                pass
+            await _dp.start_polling(_bot)
+
+        asyncio.run(_run_local())
+    else:
+        port = int(os.environ.get("PORT", "10000"))
+        uvicorn.run(app, host="0.0.0.0", port=port)
