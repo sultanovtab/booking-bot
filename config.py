@@ -32,7 +32,7 @@ class Settings:
     KIDS_2_4: int = 4000
     KIDS_ADD_PER_PERSON: int = 800
 
-    DEFAULT_ADMINS: tuple[int, ...] = (262051696, 817280523)
+    DEFAULT_ADMINS: tuple[int, ...] = (262051696, 8175791933)
 
 SETTINGS = Settings()
 
