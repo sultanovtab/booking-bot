@@ -29,7 +29,6 @@ def init_db():
     con.commit()
     con.close()
 
-
 def is_slot_taken(slot_iso: str) -> bool:
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
@@ -41,43 +40,32 @@ def is_slot_taken(slot_iso: str) -> bool:
     con.close()
     return row is not None
 
-
 def create_booking(*, tg_user_id: int, tg_username: str | None, name: str, phone: str,
                    service_key: str, service_title: str, team_size: int, slot_iso: str) -> int:
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
     cur.execute("""
         INSERT INTO bookings (
-            created_at,
-            tg_user_id,
-            tg_username,
-            name,
-            phone,
-            service_key,
-            service_title,
-            team_size,
-            slot_iso,
-            status
+            created_at, tg_user_id, tg_username, name, phone,
+            service_key, service_title, team_size, slot_iso, status
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
     """, (
         datetime.utcnow().isoformat(timespec="seconds"),
-        tg_user_id,
-        tg_username,
-        name,
-        phone,
-        service_key,
-        service_title,
-        team_size,
-        slot_iso
+        tg_user_id, tg_username, name, phone,
+        service_key, service_title, team_size, slot_iso
     ))
     con.commit()
     booking_id = cur.lastrowid
     con.close()
     return booking_id
 
-
-def confirm_booking(booking_id: int, admin_id: int, admin_name: str):
+def confirm_booking(booking_id: int, admin_id: int, admin_name: str) -> int:
+    """
+    Возвращает количество изменённых строк:
+    1 = подтвердили успешно
+    0 = бронь уже подтверждена/отклонена кем-то другим
+    """
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
     cur.execute("""
@@ -94,38 +82,31 @@ def confirm_booking(booking_id: int, admin_id: int, admin_name: str):
         booking_id
     ))
     con.commit()
+    changed = cur.rowcount
     con.close()
+    return changed
 
-
-def set_status(booking_id: int, status: str):
+def reject_booking(booking_id: int) -> int:
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
-    cur.execute(
-        "UPDATE bookings SET status=? WHERE id=?",
-        (status, booking_id)
-    )
+    cur.execute("""
+        UPDATE bookings
+        SET status='rejected'
+        WHERE id=? AND status='pending'
+    """, (booking_id,))
     con.commit()
+    changed = cur.rowcount
     con.close()
-
+    return changed
 
 def get_booking(booking_id: int):
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
     cur.execute("""
       SELECT
-        id,
-        tg_user_id,
-        tg_username,
-        name,
-        phone,
-        service_key,
-        service_title,
-        team_size,
-        slot_iso,
-        status,
-        confirmed_by_id,
-        confirmed_by_name,
-        confirmed_at
+        id, tg_user_id, tg_username, name, phone,
+        service_key, service_title, team_size, slot_iso, status,
+        confirmed_by_id, confirmed_by_name, confirmed_at
       FROM bookings
       WHERE id=?
     """, (booking_id,))
