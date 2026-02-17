@@ -167,6 +167,14 @@ async def cancel(message: Message, state: FSMContext):
     await message.answer("Ок, отменил.", reply_markup=main_menu_kb())
 
 
+async def cmd_help(message: Message):
+    await message.answer(
+        "• /start — меню\n• /book — бронь\n• /cancel — отмена\n• /admin — список броней (только админы)\n\n"
+        "Взрослые квесты: 10:00–20:30, Каннибал до 23:30.\n"
+        "После 22:00 — только Каннибал (и только одна бронь на слот).",
+        reply_markup=main_menu_kb(),
+    )
+
 async def got_name(message: Message, state: FSMContext):
     name = (message.text or "").strip()
     if not is_valid_name(name):
@@ -350,6 +358,7 @@ def build_dispatcher() -> Dispatcher:
     dp = Dispatcher(storage=MemoryStorage())
 
     dp.message.register(start, CommandStart())
+    dp.message.register(cmd_help, Command("help"))
     dp.message.register(cmd_book, Command("book"))
     dp.message.register(cancel, Command("cancel"))
 
@@ -394,3 +403,4 @@ async def main():
 if __name__ == "__main__":
     import asyncio
     asyncio.run(main())
+
