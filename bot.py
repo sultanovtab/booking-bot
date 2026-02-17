@@ -169,9 +169,8 @@ async def cancel(message: Message, state: FSMContext):
 
 async def cmd_help(message: Message):
     await message.answer(
-        "• /start — меню\n• /book — бронь\n• /cancel — отмена\n• /admin — список броней (только админы)\n\n"
-        "Взрослые квесты: 10:00–20:30, Каннибал до 23:30.\n"
-        "После 22:00 — только Каннибал (и только одна бронь на слот).",
+        "• /start — меню\n• /book — бронь\n• /cancel — отмена\n• /admin\n\n"
+        "Квесты доступны: 10:00–20:30, Каннибал до 23:30.\n"
         reply_markup=main_menu_kb(),
     )
 
@@ -432,3 +431,4 @@ async def on_shutdown():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "10000"))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
