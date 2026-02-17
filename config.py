@@ -28,7 +28,7 @@ class Settings:
     AFTER_21_TIME: time = time(21, 0)
 
     # Админы по умолчанию (твои)
-    DEFAULT_ADMINS: tuple[int, ...] = (262051696, 817280523)
+    DEFAULT_ADMINS: tuple[int, ...] = (262051696, 8175791933)
 
 SETTINGS = Settings()
 
