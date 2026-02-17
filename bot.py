@@ -1,7 +1,6 @@
 # bot.py
 import os
 import re
-import threading
 from datetime import datetime, timedelta, date
 from zoneinfo import ZoneInfo
 
@@ -11,13 +10,14 @@ from aiogram.types import (
     Message, CallbackQuery,
     ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 )
+from aiogram.types import Update
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
 import uvicorn
 
 import db as booking_db
@@ -26,27 +26,27 @@ from booking_logic import generate_slots_for_date, slot_available_for_service, i
 import admin as admin_mod
 
 
-# ---------- web health ----------
-app = FastAPI()
-@app.get("/")
-def root():
-    return {"status": "ok"}
-
-def run_web():
-    port = int(os.environ.get("PORT", "10000"))
-    uvicorn.run(app, host="0.0.0.0", port=port)
-
-
 # ---------- env ----------
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 if not BOT_TOKEN:
     raise RuntimeError("Не найден BOT_TOKEN в Render Environment.")
 
+WEBHOOK_BASE = os.getenv("WEBHOOK_BASE", "").strip()   # https://...onrender.com
+WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "").strip()   # /tg/webhook_secret
+
+if not WEBHOOK_BASE:
+    raise RuntimeError("Не найден WEBHOOK_BASE в Render Environment (например https://booking-bot-11fl.onrender.com)")
+if not WEBHOOK_PATH or not WEBHOOK_PATH.startswith("/"):
+    raise RuntimeError("WEBHOOK_PATH должен начинаться с '/', например /tg/webhook_kletka_2026")
+
+WEBHOOK_URL = WEBHOOK_BASE.rstrip("/") + WEBHOOK_PATH
+
 TZ = ZoneInfo(SETTINGS.TZ)
 ADMIN_IDS = set(get_admin_ids())
 
 PHONE_RE = re.compile(r"^\+?\d[\d \-\(\)]{8,20}\d$")
+
 
 def normalize_phone(s: str) -> str:
     return re.sub(r"[ \-\(\)]", "", s.strip())
@@ -174,6 +174,7 @@ async def cmd_help(message: Message):
         "После 22:00 — только Каннибал (и только одна бронь на слот).",
         reply_markup=main_menu_kb(),
     )
+
 
 async def got_name(message: Message, state: FSMContext):
     name = (message.text or "").strip()
@@ -391,16 +392,43 @@ def build_dispatcher() -> Dispatcher:
     return dp
 
 
-async def main():
-    booking_db.init_db()
-    threading.Thread(target=run_web, daemon=True).start()
+# ---------- Webhook FastAPI ----------
+app = FastAPI()
 
-    bot = Bot(token=BOT_TOKEN)
-    dp = build_dispatcher()
-    await dp.start_polling(bot)
+# глобальные bot/dp
+bot = Bot(token=BOT_TOKEN)
+dp = build_dispatcher()
+
+
+@app.get("/")
+def root():
+    return {"status": "ok"}
+
+
+@app.post(WEBHOOK_PATH)
+async def telegram_webhook(request: Request):
+    try:
+        data = await request.json()
+        update = Update.model_validate(data)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid update")
+
+    await dp.feed_update(bot, update)
+    return {"ok": True}
+
+
+@app.on_event("startup")
+async def on_startup():
+    booking_db.init_db()
+    await bot.delete_webhook(drop_pending_updates=True)
+    await bot.set_webhook(WEBHOOK_URL)
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    await bot.delete_webhook()
 
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
-
+    port = int(os.environ.get("PORT", "10000"))
+    uvicorn.run(app, host="0.0.0.0", port=port)
