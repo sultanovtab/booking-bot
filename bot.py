@@ -17,7 +17,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Response
 import uvicorn
 
 import db as booking_db
@@ -179,7 +179,6 @@ async def cmd_help(message: Message):
         "Квесты доступны: 10:00–20:30, Каннибал до 23:30.\n",
         reply_markup=main_menu_kb(),
     )
-
 
 
 async def got_name(message: Message, state: FSMContext):
@@ -401,7 +400,7 @@ def build_dispatcher() -> Dispatcher:
 # ---------- Webhook FastAPI ----------
 app = FastAPI()
 
-# глобальные bot/dp
+# глобальные bot/dp (для webhook режима)
 bot = Bot(token=BOT_TOKEN)
 dp = build_dispatcher()
 
@@ -409,6 +408,13 @@ dp = build_dispatcher()
 @app.get("/")
 def root():
     return {"status": "ok"}
+
+
+# ВАЖНО: Render/прокси иногда делает HEAD / как health-check
+# Если не обработать — будет 405 и Render может перезапускать сервис.
+@app.head("/")
+def root_head():
+    return Response(status_code=200)
 
 
 @app.post(WEBHOOK_PATH)
@@ -434,10 +440,12 @@ async def on_startup():
             raise RuntimeError("WEBHOOK_URL должен начинаться с https://")
         await bot.set_webhook(WEBHOOK_URL)
 
+
 @app.on_event("shutdown")
 async def on_shutdown():
     if MODE != "local":
         await bot.delete_webhook()
+
 
 if __name__ == "__main__":
     # local: удобный тестовый режим (polling) — запускай с MODE=local и DEV токеном
